@@ -27,7 +27,7 @@ struct BTree {
 };
 
 struct BNode {
-    int pos;
+    int addr;
 
     enum NodeType type;
     int num_keys;
@@ -57,8 +57,8 @@ void get_dimensions(size_t block_size, size_t key_size, size_t header_size,
         ceil(((double)(key_size + sizeof(size_t)) * MIN_ORDER + header_size +
               sizeof(size_t)) / block_size);
     *order =
-        floor(((double)*blocks_per_node * block_size - header_size
-                    - sizeof(size_t)) / (key_size + sizeof(size_t)));
+        floor(((double)*blocks_per_node * block_size - header_size -
+               sizeof(size_t)) / (key_size + sizeof(size_t)));
 }
 
 enum NodeType bnode_get_type(struct BTree * bt, struct BNode * bn) { }
@@ -66,22 +66,20 @@ enum NodeType bnode_get_type(struct BTree * bt, struct BNode * bn) { }
 int bnode_is_full(struct BTree * bt, struct BNode * bn) { }
 
 // leaves file pointing to start of data
-void bnode_fread(struct BTree * bt, struct BNode * bn, FILE * file) {
-    // fread((char*)&bn->type,
-}
+void bnode_fread(struct BTree * bt, struct BNode * bn, FILE * file) { }
 
 // test basic file io + casting
 void test1() {
     int x = 9001;
     FILE * file;
     file = fopen("test.bin", "r+b");
-    fwrite((char*)&x, sizeof(x), 1, file);
+    fwrite(&x, sizeof(x), 1, file);
     rewind(file);
     int y;
-    fread((char*)&y, sizeof(y), 1, file);
+    fread(&y, sizeof(y), 1, file);
     printf("%d\n", y);
     int z = 230909;
-    printf("%d\n", type_cmp((char*)&y, (char*)&z, INT));
+    printf("%d\n", type_cmp(&y, &z, INT));
     fclose(file);
 }
 
@@ -89,8 +87,8 @@ void test1() {
 void test2() {
     printf("%lu %lu %lu\n", sizeof(size_t), sizeof(int), sizeof(enum NodeType));
     int o, b;
-    get_dimensions(BLOCK_SIZE, sizeof(double), sizeof(int) + sizeof(enum NodeType),
-                   &o, &b);
+    get_dimensions(BLOCK_SIZE, sizeof(double),
+                   sizeof(int) + sizeof(enum NodeType), &o, &b);
     printf("%d %d\n", o, b);
 }
 
@@ -99,21 +97,28 @@ void test3() {
     FILE * file = fopen("test.bin", "r+b");
     fseek(file, 20, SEEK_SET);
     int x = 9091;
-    fwrite((char*)&x, sizeof(x), 1, file);
+    fwrite(&x, sizeof(x), 1, file);
     fclose(file);
 }
 
 // writes test node to file
 void test4() {
     FILE * file = fopen("test.bin", "r+b");
-    fwrite((char*)ROOT, sizeof(enum NodeType), 1, file);
-    fwrite((char*)5, sizeof(int), 1, file);
+    printf("%lu %d\n", sizeof(enum NodeType), ROOT);
+    enum NodeType tmp_nt = ROOT;
+    fwrite(&tmp_nt, sizeof(enum NodeType), 1, file);
+    int size = 5;
+    fwrite(&size, sizeof(int), 1, file);
     double d[] = {9.92, 203.23001, 9999.2, 898988.112};
-    fwrite((char*)9.92, sizeof(double)
+    fwrite(d, sizeof(double), size, file);
+    fclose(file);
+    // fwrite((char*)9.92, sizeof(double)
 }
 
 int main() {
-    test2();
-    test3();
+    // test1();
+    // test2();
+    // test3();
+    test4();
     return 0;
 }
