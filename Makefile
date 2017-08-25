@@ -1,6 +1,6 @@
 MKDIR=mkdir -p
 C=gcc
-CFLAGS=-std=c99 -c -Wall -Iinclude/ -D_FILE_OFFSET_BITS=64
+CFLAGS=-std=c99 -c -Wall -Iinclude/
 LDFLAGS=
 SOURCES=$(wildcard src/*.c)
 OBJECTS=$(addprefix build/, $(notdir $(SOURCES:.c=.o)))

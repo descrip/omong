@@ -40,6 +40,7 @@ size_t type_size(enum Type t) {
     case DOUBLE:
         return sizeof(double);
     }
+    return -1;  // shouldn't happen
 }
 
 int type_cmp(void * a, void * b, enum Type t) {
@@ -49,24 +50,31 @@ int type_cmp(void * a, void * b, enum Type t) {
     case DOUBLE:
         return *(double*)a < *(double*)b;
     }
+    return -1;  // shouldn't happen
 }
 
 void get_dimensions(size_t block_size, size_t key_size, size_t header_size,
                     int * order, int * blocks_per_node) {
     *blocks_per_node =
-        ceil(((double)(key_size + sizeof(size_t)) * MIN_ORDER + header_size +
-              sizeof(size_t)) / block_size);
+        ceil(((double)(key_size + sizeof(long)) * MIN_ORDER + header_size +
+              sizeof(long)) / block_size);
     *order =
         floor(((double)*blocks_per_node * block_size - header_size -
-               sizeof(size_t)) / (key_size + sizeof(size_t)));
+               sizeof(long)) / (key_size + sizeof(long)));
 }
 
+void bnode_fseek_children(struct BTree * bt, struct BNode * bn, FILE * file) {
+
+}
+
+/*
 enum NodeType bnode_get_type(struct BTree * bt, struct BNode * bn) { }
 
 int bnode_is_full(struct BTree * bt, struct BNode * bn) { }
 
 // leaves file pointing to start of data
 void bnode_fread(struct BTree * bt, struct BNode * bn, FILE * file) { }
+*/
 
 // test basic file io + casting
 void test1() {
@@ -95,7 +103,8 @@ void test2() {
 // test fseek
 void test3() {
     FILE * file = fopen("test.bin", "r+b");
-    fseek(file, 20, SEEK_SET);
+    long long int wow = 0xffffffff;
+    fseek(file, wow, SEEK_SET);
     int x = 9091;
     fwrite(&x, sizeof(x), 1, file);
     fclose(file);
@@ -117,8 +126,9 @@ void test4() {
 
 int main() {
     // test1();
-    // test2();
+    test2();
     // test3();
-    test4();
+    // test4();
+    printf("%lu\n", sizeof(long long int));
     return 0;
 }
