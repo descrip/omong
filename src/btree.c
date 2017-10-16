@@ -12,127 +12,70 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#define MIN_ORDER 128
+const int ORDER = 340;
 
-// TODO: duplicates?
-
-/*
- * off_t for offsets
- * size_t for sizes (which can be used as offsets)
- * use stdint.h for integer with sizes
- * wtf am i going to do for standardised double???
- */
-
-typedef struct {
+struct BNode {
     int32_t num_keys;
-} BNodeHeader;
+    char *keys, *ids, *children;
+};
 
-typedef struct {
-    BNodeHeader *header;
-    char *keys;
-    char *ids;
-    char *children;
-} BNode;
+struct BTree {
+    struct BNode *root;
+};
 
-typedef struct {
-    size_t header_size;
-    size_t key_size;
-    int order;
-    BNode *root;
-} BTree;
-
-// TODO: ftruncate to pad file
-size_t get_file_size(const char *filename) {
-    struct stat st;
-    stat(filename, &st);
-    return st.st_size;
-}
-
-// TODO: static for now
-int get_order() {
-    return 256;
-}
-
-off_t bnode_get_keys_offset() {
-    return 12;
-}
-
-off_t bnode_get_ids_offset() {
-    return bnode_get_keys_offset() + sizeof(double) * get_order();
-}
-
-off_t bnode_get_children_offset() {
-    return bnode_get_ids_offset() + sizeof(uint32_t) * get_order();
-}
-
-BNode *bnode_init(char *map) {
-    BNode *bn = malloc(sizeof(BNode));
-    bn->header = malloc(sizeof(BNodeHeader));
-    bn->header->num_keys = *(int32_t*)map;
-    bn->keys = map + bnode_get_keys_offset();
-    bn->ids = map + bnode_get_ids_offset();
-    bn->children = map + bnode_get_children_offset();
+struct BNode *bnode_init(char *map) {
+    struct BNode *bn = malloc(sizeof(struct BNode));
+    bn->num_keys    = *(int32_t*) map;
+    bn->keys        = map+4;
+    bn->ids         = map+4 + sizeof(int32_t)*ORDER;
+    bn->children    = map+4 + (sizeof(int32_t)*2)*ORDER;
     return bn;
 }
 
-off_t btree_find_internal(BNode *bn, double key) {
-    if (bn->header->num_keys == 0)
-        return -1;
+void bnode_write_test(char *map) {
+    int num_keys = 2;
+    memcpy(map, &num_keys, sizeof(num_keys));
+    int32_t keys[] = {23, 57};
+    memcpy(map+4, keys, sizeof(keys));
+    int32_t ids[] = {1, 2};
+    memcpy(map+4 + sizeof(int32_t)*ORDER, ids, sizeof(ids));
 }
 
-int bnode_key_lowerbound(BTree *bt, BNode *bn, double key) {
-    size_t key_size = sizeof(double);       // TODO: hardcoded for now
-    // TODO: linear search, replace with binary
-    for (int i = 0; i < bn->header->num_keys; ++i)
-        if (key <= *(double*)(bn->keys + key_size*i))
+int bnode_key_lower_bound(struct BNode *bn, int32_t key) {
+    // TODO: linear search for now, replace with binary
+    for (int i = 0; i < ORDER; ++i)
+        if (key <= *(int32_t*) (bn->keys+i*sizeof(int32_t)))
             return i;
-    return bn->header->num_keys;
+    return bn->num_keys;
 }
 
-void write_test_bnode(char *map) {
-    /*
-    int x = 9002, y = 884;
-    memcpy(map, &x, sizeof(int32_t));
-    memcpy(map+sizeof(int32_t), &y, sizeof(int32_t));
-    */
+static int32_t bnode_find(BNode *bn, int key) {
+    int ind = bnode_key_lower_bound(bn, key);
+    if (key == *(int32_t*) (bn->keys + ind*sizeof(int32_t)))
+        return *(int32_t*) (bn->ids + ind*sizeof(int32_t));
+    else {
+        int child = *(int32_t*) (bn->children + ind*sizeof(int32_t));
+        if (child == 0) return -1;
+        else return bnode_find(child);
+    }
+}
 
-    int32_t num_keys = 2;
-    memcpy(map, &num_keys, sizeof(int32_t));
+int btree_find(BTree *bt, int key) {
 
-    double keys[] = {9.2393, 999929.57};
-    memcpy(map + bnode_get_keys_offset(), keys, sizeof(keys));
 }
 
 int main() {
     int fd = open("test.bin", O_RDWR);
     int page_size = sysconf(_SC_PAGE_SIZE);
-    // printf("%lu\n", get_file_size("test.bin"));
 
-    /*
-    int x = 9001, y = 883;
-    assert(pwrite(fd, &x, sizeof(int32_t), 0) != 0);
-    assert(pwrite(fd, &y, sizeof(int32_t), sizeof(int32_t)) != 0);
-    */
-
-    char *map = mmap(NULL, sizeof(int32_t)*2, PROT_READ | PROT_WRITE,
+    char *map = mmap(NULL, page_size, PROT_READ | PROT_WRITE,
             MAP_SHARED, fd, 0);
 
-    write_test_bnode(map);
-    BNode *bn = bnode_init(map);
-    printf("%d\n", bn->header->num_keys);
-    printf("%lf\n", *(double*)bn->keys);
-    printf("%lf\n", *(double*)(bn->keys+sizeof(double)));
+    // bnode_write_test(map);
+    struct BNode *bn = bnode_init(map);
 
-    printf("%d\n", bnode_key_lowerbound(NULL, bn, 999929.58));
-
-    BTree *bt = malloc(sizeof(BTree));
-    bt->root = bn;
-
-    /*
-    int32_t a = *(int32_t*) map,
-            b = *(int32_t*) (map+sizeof(int32_t));
-    printf("%d %d\n", a, b);
-    */
+    int ind = bnode_key_lower_bound(bn, 22);
+    printf("%d\n", ind);
 
     assert(munmap(map, sizeof(int32_t)*2) == 0);
     close(fd);
