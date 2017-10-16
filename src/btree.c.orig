@@ -1,0 +1,77 @@
+#define _XOPEN_SOURCE 500
+
+#include <assert.h>
+#include <fcntl.h>
+#include <math.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <string.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
+
+#define MIN_ORDER 128
+
+typedef struct {
+    int32_t num_keys;
+} BNodeHeader;
+
+typedef char* BNodeBody;
+
+typedef struct {
+    BNodeHeader *header;
+    BNodeBody *body;
+} BNode;
+
+// TODO: ftruncate to pad file
+size_t
+get_file_size(const char *filename)
+{
+    struct stat st;
+    stat(filename, &st);
+    return st.st_size;
+}
+
+int32_t
+get_order(size_t page_size, size_t key_size, size_t header_size)
+{
+    // TODO: only storing double keys for now
+    return 254;
+}
+
+void
+write_test_bnode(char *addr)
+{
+    int x = 9002, y = 884;
+    memcpy(addr, &x, sizeof(int32_t));
+    memcpy(addr+sizeof(int32_t), &y, sizeof(int32_t));
+}
+
+int
+main()
+{
+    int fd = open("test.bin", O_RDWR);
+    int page_size = sysconf(_SC_PAGE_SIZE);
+    // printf("%lu\n", get_file_size("test.bin"));
+
+    /*
+    int x = 9001, y = 883;
+    assert(pwrite(fd, &x, sizeof(int32_t), 0) != 0);
+    assert(pwrite(fd, &y, sizeof(int32_t), sizeof(int32_t)) != 0);
+    */
+
+    char *addr = mmap(NULL, sizeof(int32_t)*2, PROT_READ | PROT_WRITE,
+            MAP_SHARED, fd, 0);
+
+    // write_test_bnode(addr);
+
+    int32_t a = *(int32_t*) addr,
+            b = *(int32_t*) (addr+sizeof(int32_t));
+    printf("%d %d\n", a, b);
+
+    assert(munmap(addr, strlen(addr)) == 0);
+    close(fd);
+
+    return 0;
+}

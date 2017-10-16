@@ -1,134 +1,141 @@
-#include <stdio.h>
-#include <math.h>
+#define _XOPEN_SOURCE 500
 
-#define BLOCK_SIZE 512      // in bytes
+#include <assert.h>
+#include <fcntl.h>
+#include <math.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
+
 #define MIN_ORDER 128
 
-enum Type {
-    DOUBLE      = '\x01',
-    INT         = '\x10'
-};
-
-enum NodeType { ROOT, INTERNAL, EXTERNAL };
-
-struct OrdType {
-    enum Type type;
-    int ord;
-};
-
-struct BTree {
-    struct BNode * root;
-    size_t block_size;
-    size_t key_size;
-    size_t header_size;
-    int order;
-    int blocks_per_node;
-    struct OrdType index[];
-};
-
-struct BNode {
-    int addr;
-
-    enum NodeType type;
-    int num_keys;
-};
-
-size_t type_size(enum Type t) {
-    switch (t) {
-    case INT:
-        return sizeof(int);
-    case DOUBLE:
-        return sizeof(double);
-    }
-    return -1;  // shouldn't happen
-}
-
-int type_cmp(void * a, void * b, enum Type t) {
-    switch (t) {
-    case INT:
-        return *(int*)a < *(int*)b;
-    case DOUBLE:
-        return *(double*)a < *(double*)b;
-    }
-    return -1;  // shouldn't happen
-}
-
-void get_dimensions(size_t block_size, size_t key_size, size_t header_size,
-                    int * order, int * blocks_per_node) {
-    *blocks_per_node =
-        ceil(((double)(key_size + sizeof(long)) * MIN_ORDER + header_size +
-              sizeof(long)) / block_size);
-    *order =
-        floor(((double)*blocks_per_node * block_size - header_size -
-               sizeof(long)) / (key_size + sizeof(long)));
-}
-
-void bnode_fseek_children(struct BTree * bt, struct BNode * bn, FILE * file) {
-
-}
+// TODO: duplicates?
 
 /*
-enum NodeType bnode_get_type(struct BTree * bt, struct BNode * bn) { }
+ * off_t for offsets
+ * size_t for sizes (which can be used as offsets)
+ * use stdint.h for integer with sizes
+ * wtf am i going to do for standardised double???
+ */
 
-int bnode_is_full(struct BTree * bt, struct BNode * bn) { }
+typedef struct {
+    int32_t num_keys;
+} BNodeHeader;
 
-// leaves file pointing to start of data
-void bnode_fread(struct BTree * bt, struct BNode * bn, FILE * file) { }
-*/
+typedef struct {
+    BNodeHeader *header;
+    char *keys;
+    char *ids;
+    char *children;
+} BNode;
 
-// test basic file io + casting
-void test1() {
-    int x = 9001;
-    FILE * file;
-    file = fopen("test.bin", "r+b");
-    fwrite(&x, sizeof(x), 1, file);
-    rewind(file);
-    int y;
-    fread(&y, sizeof(y), 1, file);
-    printf("%d\n", y);
-    int z = 230909;
-    printf("%d\n", type_cmp(&y, &z, INT));
-    fclose(file);
+typedef struct {
+    size_t header_size;
+    size_t key_size;
+    int order;
+    BNode *root;
+} BTree;
+
+// TODO: ftruncate to pad file
+size_t get_file_size(const char *filename) {
+    struct stat st;
+    stat(filename, &st);
+    return st.st_size;
 }
 
-// test get_dimensions
-void test2() {
-    printf("%lu %lu %lu\n", sizeof(size_t), sizeof(int), sizeof(enum NodeType));
-    int o, b;
-    get_dimensions(BLOCK_SIZE, sizeof(double),
-                   sizeof(int) + sizeof(enum NodeType), &o, &b);
-    printf("%d %d\n", o, b);
+// TODO: static for now
+int get_order() {
+    return 256;
 }
 
-// test fseek
-void test3() {
-    FILE * file = fopen("test.bin", "r+b");
-    long long int wow = 0xffffffff;
-    fseek(file, wow, SEEK_SET);
-    int x = 9091;
-    fwrite(&x, sizeof(x), 1, file);
-    fclose(file);
+off_t bnode_get_keys_offset() {
+    return 12;
 }
 
-// writes test node to file
-void test4() {
-    FILE * file = fopen("test.bin", "r+b");
-    printf("%lu %d\n", sizeof(enum NodeType), ROOT);
-    enum NodeType tmp_nt = ROOT;
-    fwrite(&tmp_nt, sizeof(enum NodeType), 1, file);
-    int size = 5;
-    fwrite(&size, sizeof(int), 1, file);
-    double d[] = {9.92, 203.23001, 9999.2, 898988.112};
-    fwrite(d, sizeof(double), size, file);
-    fclose(file);
-    // fwrite((char*)9.92, sizeof(double)
+off_t bnode_get_ids_offset() {
+    return bnode_get_keys_offset() + sizeof(double) * get_order();
+}
+
+off_t bnode_get_children_offset() {
+    return bnode_get_ids_offset() + sizeof(uint32_t) * get_order();
+}
+
+BNode *bnode_init(char *map) {
+    BNode *bn = malloc(sizeof(BNode));
+    bn->header = malloc(sizeof(BNodeHeader));
+    bn->header->num_keys = *(int32_t*)map;
+    bn->keys = map + bnode_get_keys_offset();
+    bn->ids = map + bnode_get_ids_offset();
+    bn->children = map + bnode_get_children_offset();
+    return bn;
+}
+
+off_t btree_find_internal(BNode *bn, double key) {
+    if (bn->header->num_keys == 0)
+        return -1;
+}
+
+int bnode_key_lowerbound(BTree *bt, BNode *bn, double key) {
+    size_t key_size = sizeof(double);       // TODO: hardcoded for now
+    // TODO: linear search, replace with binary
+    for (int i = 0; i < bn->header->num_keys; ++i)
+        if (key <= *(double*)(bn->keys + key_size*i))
+            return i;
+    return bn->header->num_keys;
+}
+
+void write_test_bnode(char *map) {
+    /*
+    int x = 9002, y = 884;
+    memcpy(map, &x, sizeof(int32_t));
+    memcpy(map+sizeof(int32_t), &y, sizeof(int32_t));
+    */
+
+    int32_t num_keys = 2;
+    memcpy(map, &num_keys, sizeof(int32_t));
+
+    double keys[] = {9.2393, 999929.57};
+    memcpy(map + bnode_get_keys_offset(), keys, sizeof(keys));
 }
 
 int main() {
-    // test1();
-    test2();
-    // test3();
-    // test4();
-    printf("%lu\n", sizeof(long long int));
+    int fd = open("test.bin", O_RDWR);
+    int page_size = sysconf(_SC_PAGE_SIZE);
+    // printf("%lu\n", get_file_size("test.bin"));
+
+    /*
+    int x = 9001, y = 883;
+    assert(pwrite(fd, &x, sizeof(int32_t), 0) != 0);
+    assert(pwrite(fd, &y, sizeof(int32_t), sizeof(int32_t)) != 0);
+    */
+
+    char *map = mmap(NULL, sizeof(int32_t)*2, PROT_READ | PROT_WRITE,
+            MAP_SHARED, fd, 0);
+
+    write_test_bnode(map);
+    BNode *bn = bnode_init(map);
+    printf("%d\n", bn->header->num_keys);
+    printf("%lf\n", *(double*)bn->keys);
+    printf("%lf\n", *(double*)(bn->keys+sizeof(double)));
+
+    printf("%d\n", bnode_key_lowerbound(NULL, bn, 999929.58));
+
+    BTree *bt = malloc(sizeof(BTree));
+    bt->root = bn;
+
+    /*
+    int32_t a = *(int32_t*) map,
+            b = *(int32_t*) (map+sizeof(int32_t));
+    printf("%d %d\n", a, b);
+    */
+
+    assert(munmap(map, sizeof(int32_t)*2) == 0);
+    close(fd);
+
     return 0;
 }
