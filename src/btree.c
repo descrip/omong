@@ -63,18 +63,16 @@ int bnode_key_lower_bound(struct BNode *bn, int32_t key) {
   return *bn->num_keys;
 }
 
-/*
 static int32_t bnode_find(struct BNode *bn, int key) {
-  int ind = bnode_key_lower_bound(bn, key);
-  if (key == *(int32_t*) (bn->keys + ind*sizeof(int32_t)))
-    return *(int32_t*) (bn->ids + ind*sizeof(int32_t));
+  size_t ind = bnode_key_lower_bound(bn, key);
+  if (key == bn->keys[ind])
+    return bn->ids[ind];
   else {
-    int child = *(int32_t*) (bn->children + ind*sizeof(int32_t));
+    int32_t child = bn->children[ind];
     if (child == 0) return -1;
     else return bnode_find(child);
   }
 }
-*/
 
 /*
 int btree_find(BTree *bt, int key) {
