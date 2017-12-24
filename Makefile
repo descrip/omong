@@ -1,24 +1,27 @@
-MKDIR=mkdir -p
-C=gcc
-CFLAGS=-std=c99 -c -Wall -Iinclude/ -g
-LDFLAGS=
-SOURCES=$(wildcard src/*.c)
-OBJECTS=$(addprefix build/, $(notdir $(SOURCES:.c=.o)))
-EXECUTABLE=bin/omong
-MAKEDIRS=bin/ build/
+TARGET_EXEC ?= omong
+BUILD_DIR ?= ./build
+SRC_DIR ?= ./src
+
+SOURCES := $(shell find $(SRC_DIRS) -name *.cc)
+OBJECTS := $(SOURCES:%.cc=$(BUILD_DIR)/%.o)
+DEPENDS := $(OBJECTS:.o=.d)
+
+CC := g++-7
+CCFLAGS := -std=c++14 -Wall -MMD -g -Wno-sign-compare # -O2
+LDFLAGS :=
+
+$(BUILD_DIR)/$(TARGET_EXEC): $(OBJECTS)
+	$(CC) $(OBJECTS) -o $@ $(LDFLAGS)
+
+$(BUILD_DIR)/%.o: %.cc
+	$(MKDIR_P) $(dir $@)
+	$(CC) $(CCFLAGS) $(CCFLAGS) -c $< -o $@
 
 .PHONY: clean
-
-all: $(MAKEDIRS) $(SOURCES) $(EXECUTABLE)
-
-$(MAKEDIRS):
-	${MKDIR} $(MAKEDIRS)
-
 clean:
-	rm -rf build/*.o bin/*
+	$(RM) -r $(BUILD_DIR)
 
-$(EXECUTABLE): $(OBJECTS)
-	$(C) $(LDFLAGS) $(OBJECTS) -o $@ -lm
+-include $(DEPENDS)
 
-build/%.o: src/%.c
-	$(C) $(CFLAGS) $< -o $@
+MKDIR_P ?= mkdir -p
+
