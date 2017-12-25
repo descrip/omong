@@ -7,7 +7,7 @@ OBJECTS := $(SOURCES:%.cc=$(BUILD_DIR)/%.o)
 DEPENDS := $(OBJECTS:.o=.d)
 
 CC := g++-7
-CCFLAGS := -std=c++14 -Wall -MMD -g -Wno-sign-compare # -O2
+CCFLAGS := -std=c++14 -Wall -MMD -g # -O2
 LDFLAGS :=
 
 $(BUILD_DIR)/$(TARGET_EXEC): $(OBJECTS)

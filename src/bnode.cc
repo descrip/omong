@@ -1,11 +1,11 @@
 #include "bnode.h"
 
-BNode::BNode(std::unique_ptr<FileDescriptorMap> map)
-  : map{std::move(map)},
-    numKeys{(ID_T*) map.get()},
-    keys{(KEY_T*) (map.get() + HEADER_SIZE)},
-    ids{(ID_T*) (map.get() + HEADER_SIZE + KEYS_SIZE)},
-    children{(ID_T*) (map.get() + HEADER_SIZE + KEYS_SIZE + CHILDREN_SIZE)} {}
+BNode::BNode(std::unique_ptr<FileDescriptorMap> tmp)
+  : map{std::move(tmp)},
+    numKeys{(ID_T*) map->getMap()},
+    keys{(KEY_T*) (map->getMap() + HEADER_SIZE)},
+    ids{(ID_T*) (map->getMap() + HEADER_SIZE + KEYS_SIZE)},
+    children{(ID_T*) (map->getMap() + HEADER_SIZE + KEYS_SIZE + CHILDREN_SIZE)} {}
 
 size_t BNode::lowerBound(KEY_T key) {
   // TODO: linear search for now, replace with binary

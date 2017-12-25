@@ -14,7 +14,7 @@ public:
   FileDescriptorMap(size_t size, char *map);
   ~FileDescriptorMap();
 
-  char *get();
+  char *getMap();
   size_t getSize() const;
 };
 

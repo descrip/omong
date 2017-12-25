@@ -17,7 +17,7 @@ public:
   FileDescriptor(const std::string &filename);
   ~FileDescriptor();
 
-  int get() const;
-  std::unique_ptr<FileDescriptorMap> map(off_t offset) const;
+  int getFile() const;
+  std::unique_ptr<FileDescriptorMap> makeMap(off_t offset) const;
   size_t getPageSize() const;
 };

@@ -8,10 +8,11 @@ FileDescriptor::FileDescriptor(const std::string &filename)
 
 FileDescriptor::~FileDescriptor() { close(fd); }
 
-int FileDescriptor::get() const { return fd; }
+int FileDescriptor::getFile() const { return fd; }
 
-std::unique_ptr<FileDescriptorMap> FileDescriptor::map(off_t offset) const {
-  return std::make_unique<FileDescriptorMap>(get(), offset, getPageSize());
+std::unique_ptr<FileDescriptorMap> FileDescriptor::makeMap(off_t offset) const {
+  return std::unique_ptr<FileDescriptorMap>{
+      new FileDescriptorMap{getFile(), offset, getPageSize()}};
 }
 
 size_t FileDescriptor::getPageSize() const {

@@ -12,6 +12,6 @@ FileDescriptorMap::~FileDescriptorMap() {
   assert(munmap(map, size) == 0);   // TODO
 }
 
-char *FileDescriptorMap::get() { return map; }
+char *FileDescriptorMap::getMap() { return map; }
 
 size_t FileDescriptorMap::getSize() const { return size; }

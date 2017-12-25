@@ -44,7 +44,7 @@ public:     // TODO testing
   ID_T *children;
 
 public:
-  BNode(std::unique_ptr<FileDescriptorMap> map);
+  BNode(std::unique_ptr<FileDescriptorMap> tmp);
 
   size_t getNumKeys() { return *numKeys; }
   size_t lowerBound(KEY_T key);
