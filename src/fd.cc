@@ -14,8 +14,8 @@ std::unique_ptr<FileDescriptorMap> FileDescriptor::map(off_t offset) const {
   return std::make_unique<FileDescriptorMap>(get(), offset, getPageSize());
 }
 
-int FileDescriptor::getPageSize() const {
-  int ret = sysconf(_SC_PAGE_SIZE);
+size_t FileDescriptor::getPageSize() const {
+  size_t ret = sysconf(_SC_PAGE_SIZE);
   assert(ret == 4096);    // TODO
   return ret;
 }

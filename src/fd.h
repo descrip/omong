@@ -19,5 +19,5 @@ public:
 
   int get() const;
   std::unique_ptr<FileDescriptorMap> map(off_t offset) const;
-  int getPageSize() const;
+  size_t getPageSize() const;
 };

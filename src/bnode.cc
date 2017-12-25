@@ -7,7 +7,7 @@ BNode::BNode(std::unique_ptr<FileDescriptorMap> map)
     ids{(ID_T*) (map.get() + HEADER_SIZE + KEYS_SIZE)},
     children{(ID_T*) (map.get() + HEADER_SIZE + KEYS_SIZE + CHILDREN_SIZE)} {}
 
-int BNode::lowerBound(KEY_T key) {
+size_t BNode::lowerBound(KEY_T key) {
   // TODO: linear search for now, replace with binary
   for (size_t i = 0; i < getNumKeys(); ++i)
     if (key <= keys[i])
