@@ -9,7 +9,7 @@ FileDescriptorMap::FileDescriptorMap(size_t size, char *map)
   : size{size}, map{map} {}
 
 FileDescriptorMap::~FileDescriptorMap() {
-  assert(munmap(map, size) == 0);   // TODO
+  assert(munmap(map, size) == 0);   // TODO testing
 }
 
 char *FileDescriptorMap::getMap() { return map; }

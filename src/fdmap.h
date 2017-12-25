@@ -14,6 +14,12 @@ public:
   FileDescriptorMap(size_t size, char *map);
   ~FileDescriptorMap();
 
+  /* don't allow copy, move */
+  FileDescriptorMap(const FileDescriptorMap &other) = delete;
+  FileDescriptorMap &operator=(const FileDescriptorMap &other) = delete;
+  FileDescriptorMap(FileDescriptorMap &&other) = delete;
+  FileDescriptorMap &operator=(FileDescriptorMap &&other) = delete;
+
   char *getMap();
   size_t getSize() const;
 };
