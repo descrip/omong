@@ -1,10 +1,11 @@
-#define _XOPEN_SOURCE 500
+#ifndef BNODE_H
+#define BNODE_H
 
-#include <cassert>
+#include "fdmap.h"
+
 #include <cstddef>
 #include <cstdint>
-#include <sys/mman.h>
-#include <unistd.h>
+#include <memory>
 
 class BNode {
   /*
@@ -24,6 +25,7 @@ class BNode {
    *
    * = 4088 bytes, 8 free
    */
+
 public:     // TODO testing
   using KEY_T = int32_t;
   using ID_T = uint32_t;
@@ -35,17 +37,17 @@ public:     // TODO testing
     IDS_SIZE        = (ORDER-1) * sizeof(ID_T),
     CHILDREN_SIZE   = ORDER * sizeof(ID_T);
 
-  char *map;
+  std::unique_ptr<FileDescriptorMap> map;
   ID_T *numKeys;
   KEY_T *keys;
   ID_T *ids;
   ID_T *children;
 
 public:
-  BNode(int fd, off_t offset);
-  ~BNode();
+  BNode(std::unique_ptr<FileDescriptorMap> map);
 
-  int getNumKeys() { return *numKeys; }
-
-  int lowerBound(KEY_T key);
+  size_t getNumKeys() { return *numKeys; }
+  size_t lowerBound(KEY_T key);
 };
+
+#endif
