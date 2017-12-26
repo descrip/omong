@@ -8,7 +8,7 @@
 
 class BTree {
 public: // TODO testing
-  std::unique_ptr<FileDescriptor> fd;
+  FileDescriptor fd;
   BNode root;
 
 public:

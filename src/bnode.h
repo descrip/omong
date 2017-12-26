@@ -37,14 +37,14 @@ public:     // TODO testing
     IDS_SIZE        = (ORDER-1) * sizeof(ID_T),
     CHILDREN_SIZE   = ORDER * sizeof(ID_T);
 
-  std::unique_ptr<FileDescriptorMap> map;
+  FileDescriptorMap map;
   ID_T *numKeys;
   KEY_T *keys;
   ID_T *ids;
   ID_T *children;
 
 public:
-  BNode(std::unique_ptr<FileDescriptorMap> tmp);
+  BNode(FileDescriptorMap &&tmp);
 
   size_t getNumKeys() { return *numKeys; }
   size_t lowerBound(KEY_T key);
