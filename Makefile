@@ -6,8 +6,8 @@ SOURCES := $(shell find $(SRC_DIRS) -name *.cc)
 OBJECTS := $(SOURCES:%.cc=$(BUILD_DIR)/%.o)
 DEPENDS := $(OBJECTS:.o=.d)
 
-CC := g++-7
-CCFLAGS := -std=c++14 -Wall -MMD -g # -O2
+CC := g++-5
+CCFLAGS := -std=c++14 -Wall -MMD -g -Wold-style-cast # -O2
 LDFLAGS :=
 
 $(BUILD_DIR)/$(TARGET_EXEC): $(OBJECTS)

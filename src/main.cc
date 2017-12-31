@@ -1,15 +1,21 @@
 #include "btree.h"
 
-#include <memory>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
+#include <iostream>
 
-#include <iostream> // TODO testing
+struct Params {
+  using KeyType       = int32_t;
+  using OffsetType    = uint64_t;
+  using SizeType      = uint16_t;
+
+  static const size_t
+    InternalMinDeg    = 64,
+    InternalOrder     = 2*InternalMinDeg,
+    LeafMinDeg        = 128,
+    LeafOrder         = 2*LeafMinDeg;
+};
 
 int main() {
-  BTree bt {"test.bin"};
-  std::cout << bt.root.getNumKeys() << '\n';
-  for (size_t i = 0; i < bt.root.getNumKeys(); ++i)
-    std::cout << bt.root.keys[i] << '\n';
+  FileDescriptor fd {"test.bin"};
+  BTree<Params> bt {std::move(fd)};
+  bt.test();
 }
