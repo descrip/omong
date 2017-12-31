@@ -8,10 +8,12 @@ struct Params {
   using SizeType      = uint16_t;
 
   static const size_t
-    InternalMinDeg    = 64,
-    InternalOrder     = 2*InternalMinDeg,
-    LeafMinDeg        = 128,
-    LeafOrder         = 2*LeafMinDeg;
+    /*
+    InternalOrder     = 128,
+    LeafOrder         = 256;
+    */
+    InternalOrder     = 4,
+    LeafOrder         = 4;
 };
 
 int main() {
