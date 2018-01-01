@@ -12,8 +12,9 @@ struct Params {
     InternalOrder     = 128,
     LeafOrder         = 256;
     */
-    InternalOrder     = 4,
-    LeafOrder         = 4;
+    InternalOrder     = 3,
+    LeafOrder         = 8;
+  // orders must be odd
 };
 
 int main() {
