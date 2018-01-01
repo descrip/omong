@@ -20,5 +20,7 @@ struct Params {
 int main() {
   FileDescriptor fd {"test.bin"};
   BTree<Params> bt {std::move(fd)};
+#ifdef DEBUG
   bt.test();
+#endif
 }

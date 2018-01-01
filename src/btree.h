@@ -5,7 +5,10 @@
 
 #include <map>
 #include <memory>
-#include <iostream> // TEST
+
+#ifdef DEBUG
+  #include <iostream>
+#endif
 
 // TODO what if KeyType isn't default constructible?
 
@@ -55,13 +58,10 @@ public:
   BNode &operator=(BNode &&other) = default;
 
   auto &isLeaf() { return impl_->isLeaf; }
-
   SizeType &size() { return impl_->size; }
-
   KeyType *keys() {
     return reinterpret_cast<KeyType*>(map_.get() + sizeof(Impl));
   }
-
   OffsetType *children() {
     return reinterpret_cast<OffsetType*>(map_.get() + sizeof(Impl)
         + sizeof(KeyType)*(getOrder()));
@@ -70,25 +70,15 @@ public:
   SizeType getOrder() const {
     return (impl_->isLeaf ? LeafOrder : InternalOrder);
   }
+  OffsetType getOffset() const { return offset_; }
 
   SizeType lowerBound(KeyType key);
   SizeType upperBound(KeyType key);
-
-  OffsetType getOffset() const { return offset_; }
-
   bool isFull() const { return impl_->size == getOrder(); }
 
-  void dump() {   // TEST
-    std::cout << "offset_: " << getOffset() << '\n';
-    std::cout << "isLeaf: " << isLeaf() << '\n';
-    std::cout << "size: " << size() << '\n';
-    for (SizeType i = 0; i < size(); ++i)
-      std::cout << keys()[i] << " \n"[i+1 == size()];
-    if (!isLeaf())
-      for (SizeType i = 0; i <= size(); ++i)
-        std::cout << children()[i] << " \n"[i == size()];
-    std::cout << '\n';
-  }
+#ifdef DEBUG
+  void dump();
+#endif
 };
 
 template <typename Params>
@@ -99,6 +89,21 @@ typename BNode<Params>::SizeType BNode<Params>::lowerBound(KeyType key) {
       return i;
   return impl_->size;
 }
+
+#ifdef DEBUG
+template <typename Params>
+void BNode<Params>::dump() {
+  std::cout << "offset_: " << getOffset() << '\n';
+  std::cout << "isLeaf: " << isLeaf() << '\n';
+  std::cout << "size: " << size() << '\n';
+  for (SizeType i = 0; i < size(); ++i)
+    std::cout << keys()[i] << " \n"[i+1 == size()];
+  if (!isLeaf())
+    for (SizeType i = 0; i <= size(); ++i)
+      std::cout << children()[i] << " \n"[i == size()];
+  std::cout << '\n';
+}
+#endif
 
 template <typename Params>
 typename BNode<Params>::SizeType BNode<Params>::upperBound(KeyType key) {
@@ -128,27 +133,23 @@ public:
   std::shared_ptr<BNode<Params>> lowerBound(const KeyType &key, bool splitFullBNodes = false);
   void insert(const KeyType &key);
 
-  void test();    // TEST
-
-  void dump();    // TEST
-
-  bool verify(std::shared_ptr<BNode<Params>> node); // TEST
-
-  bool verify() { return verify(getBNode(info_->root)); }    // TEST
+#ifdef DEBUG
+  void test();
+  void dump();
+  bool verify(std::shared_ptr<BNode<Params>> node);
+  bool verify() { return verify(getBNode(info_->root)); }
+#endif
 
 private:
   std::shared_ptr<BNode<Params>> getBNode(OffsetType offset);
-
+  std::shared_ptr<BNode<Params>> makeBNode();
   std::shared_ptr<BNode<Params>> loadBNode(OffsetType offset) {
     return std::make_shared<BNode<Params>>(offset, fd_.loadMap(offset));
   }
 
-  std::shared_ptr<BNode<Params>> makeBNode();
-
   void splitChild(std::shared_ptr<BNode<Params>> parent, SizeType childInd);
 };
 
-// TODO: only tested for just root, test more after insert
 template <typename Params>
 std::shared_ptr<BNode<Params>> BTree<Params>::lowerBound(const KeyType &key, bool splitFullBNodes) {
   auto root = getBNode(info_->root);
@@ -184,7 +185,9 @@ void BTree<Params>::insert(const KeyType &key) {
   auto curr = lowerBound(key, true);
   SizeType ind = curr->lowerBound(key);
   if (ind < curr->size() && curr->keys()[ind] == key) {
-    throw "shouldn't happen?";    // TEST
+#ifdef DEBUG
+      throw "shouldn't happen?";    // TEST
+#endif
     return;
   }
   for (SizeType i = curr->size(); i > ind; --i)
@@ -241,8 +244,40 @@ void BTree<Params>::splitChild(std::shared_ptr<BNode<Params>> parent, SizeType c
     parent->children()[i] = parent->children()[i-1];
   parent->children()[childInd+1] = newChild->getOffset();
   ++parent->size();
+}
 
-  // TODO: probably broken if child isn't leaf
+#ifdef DEBUG
+template <typename Params>
+void BTree<Params>::test() {     // TEST
+  fd_.truncate(4096*100);
+
+  info_->root = fd_.getPageSize();
+  info_->nextFree = fd_.getPageSize()*2;
+
+  auto bn = loadBNode(info_->root);
+
+  bn->isLeaf() = true;
+  bn->size() = 3;
+  bn->keys()[0] = -32;
+  bn->keys()[1] = 99;
+  bn->keys()[2] = 2039;
+  insert(-239);
+  insert(-999);
+  insert(98);
+  insert(90909);
+  insert(1024);
+  insert(0);
+  insert(-3);
+  insert(1010111);
+  insert(1010113);
+  insert(999);
+  insert(9998);
+  insert(100);
+  for (int i = 3000; i <= 3100; ++i)
+    insert(i);
+
+  dump();
+  assert(verify());
 }
 
 template <typename Params>
@@ -277,38 +312,6 @@ bool BTree<Params>::verify(std::shared_ptr<BNode<Params>> node) {
       }
   return true;
 }
-
-template <typename Params>
-void BTree<Params>::test() {     // TEST
-  fd_.truncate(4096*100);
-
-  info_->root = fd_.getPageSize();
-  info_->nextFree = fd_.getPageSize()*2;
-
-  auto bn = loadBNode(info_->root);
-
-  bn->isLeaf() = true;
-  bn->size() = 3;
-  bn->keys()[0] = -32;
-  bn->keys()[1] = 99;
-  bn->keys()[2] = 2039;
-  insert(-239);
-  insert(-999);
-  insert(98);
-  insert(90909);
-  insert(1024);
-  insert(0);
-  insert(-3);
-  insert(1010111);
-  insert(1010113);
-  insert(999);
-  insert(9998);
-  insert(100);
-  for (int i = 3000; i <= 3100; ++i)
-    insert(i);
-
-  dump();
-  assert(verify());
-}
+#endif
 
 #endif
