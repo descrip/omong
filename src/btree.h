@@ -15,24 +15,30 @@
 template <typename Params>
 class BTreeInfo {
   using OffsetType    = typename Params::OffsetType;
+  using SizeType      = typename Params::SizeType;
 
   FileDescriptorMap map_;
 
   struct Impl {
     OffsetType root;
     OffsetType nextFree;
+    SizeType internalOrder;
+    SizeType leafOrder;
   } *impl_;
 
 public:
   BTreeInfo(FileDescriptorMap &&map)
     : map_{std::move(map)}, impl_{reinterpret_cast<Impl*>(map_.get())} {}
 
-  // Impl *operator->() const { return impl_; }
-
   OffsetType &root() { return impl_->root; }
   const OffsetType &root() const { return impl_->root; }
   OffsetType &nextFree() { return impl_->nextFree; }
   const OffsetType &nextFree() const { return impl_->nextFree; }
+
+  SizeType &internalOrder() { return impl_->internalOrder; }
+  const SizeType &internalOrder() const { return impl_->internalOrder; }
+  SizeType &leafOrder() { return impl_->leafOrder; }
+  const SizeType &leafOrder() const { return impl_->leafOrder; }
 };
 
 template <typename Params>
@@ -41,11 +47,8 @@ class BNode {
   using OffsetType    = typename Params::OffsetType;
   using SizeType      = typename Params::SizeType;
 
-  static const SizeType
-    InternalOrder     = Params::InternalOrder,
-    LeafOrder         = Params::LeafOrder;
-
   OffsetType offset_;
+  const BTreeInfo<Params> &info_;
   FileDescriptorMap map_;
 
   struct Impl {
@@ -54,8 +57,9 @@ class BNode {
   } *impl_;
 
 public:
-  BNode(const OffsetType &offset, FileDescriptorMap &&map)
+  BNode(const OffsetType &offset, const BTreeInfo<Params> &info, FileDescriptorMap &&map)
     : offset_{offset},
+      info_{info},
       map_{std::move(map)},
       impl_{reinterpret_cast<Impl*>(map_.get())} {}
 
@@ -85,7 +89,7 @@ public:
   }
 
   SizeType getOrder() const {
-    return (impl_->isLeaf ? LeafOrder : InternalOrder);
+    return (isLeaf() ? info_.leafOrder() : info_.internalOrder());
   }
   OffsetType getOffset() const { return offset_; }
 
@@ -159,9 +163,9 @@ public:
 
 private:
   std::shared_ptr<BNode<Params>> getBNode(OffsetType offset);
-  std::shared_ptr<BNode<Params>> makeBNode();
+  std::shared_ptr<BNode<Params>> makeBNode(bool isLeaf);
   std::shared_ptr<BNode<Params>> loadBNode(OffsetType offset) {
-    return std::make_shared<BNode<Params>>(offset, fd_.loadMap(offset));
+    return std::make_shared<BNode<Params>>(offset, info_, fd_.loadMap(offset));
   }
 
   void splitChild(std::shared_ptr<BNode<Params>> parent, SizeType childInd);
@@ -171,7 +175,7 @@ template <typename Params>
 std::shared_ptr<BNode<Params>> BTree<Params>::lowerBound(const KeyType &key, bool splitFullBNodes) {
   auto root = getBNode(info_.root());
   if (splitFullBNodes && root->isFull()) {
-    auto newRoot = makeBNode();
+    auto newRoot = makeBNode(false);
     newRoot->children()[0] = root->getOffset();
     info_.root() = newRoot->getOffset();
     splitChild(newRoot, 0);
@@ -224,13 +228,14 @@ std::shared_ptr<BNode<Params>> BTree<Params>::getBNode(OffsetType offset) {
 }
 
 template <typename Params>
-std::shared_ptr<BNode<Params>> BTree<Params>::makeBNode() {
+std::shared_ptr<BNode<Params>> BTree<Params>::makeBNode(bool isLeaf) {
   // TODO truncate file
   // TODO make a freelist
-  auto ret = std::make_shared<BNode<Params>>(info_.nextFree(), fd_.loadMap(info_.nextFree()));
+  auto ret = std::make_shared<BNode<Params>>(info_.nextFree(),
+      info_, fd_.loadMap(info_.nextFree()));
   cache_[info_.nextFree()] = ret;
   info_.nextFree() += fd_.getPageSize();
-  ret->isLeaf() = false;
+  ret->isLeaf() = isLeaf;
   ret->size() = 0;
   return ret;
 }
@@ -242,8 +247,7 @@ void BTree<Params>::splitChild(std::shared_ptr<BNode<Params>> parent, SizeType c
   auto child = getBNode(parent->children()[childInd]);
   SizeType order = child->getOrder();
 
-  auto newChild = makeBNode();
-  newChild->isLeaf() = child->isLeaf();
+  auto newChild = makeBNode(child->isLeaf());
   newChild->size() = order/2;
   child->size() = order/2;
 
@@ -269,6 +273,8 @@ void BTree<Params>::test() {     // TEST
 
   info_.root() = fd_.getPageSize();
   info_.nextFree() = fd_.getPageSize()*2;
+  info_.internalOrder() = 3;
+  info_.leafOrder() = 8;
 
   auto bn = loadBNode(info_.root());
 
