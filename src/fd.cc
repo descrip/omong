@@ -36,6 +36,7 @@ FileDescriptorMap &FileDescriptorMap::operator=(FileDescriptorMap &&other) {
 }
 
 char *FileDescriptorMap::get() { return map_; }
+const char *FileDescriptorMap::get() const { return map_; }
 
 size_t FileDescriptorMap::size() const { return size_; }
 
@@ -63,13 +64,13 @@ FileDescriptor &FileDescriptor::operator=(FileDescriptor &&other) {
   return *this;
 }
 
-int FileDescriptor::fd() { return fd_; }
+int FileDescriptor::fd() const { return fd_; }
 
-FileDescriptorMap FileDescriptor::loadMap(off_t offset) {
+FileDescriptorMap FileDescriptor::loadMap(off_t offset) const {
   return FileDescriptorMap{fd(), offset, getPageSize()};
 }
 
-size_t FileDescriptor::getPageSize() {
+size_t FileDescriptor::getPageSize() const {
   size_t ret = sysconf(_SC_PAGE_SIZE);
   assert(ret == 4096);    // TODO testing
   return ret;
@@ -79,6 +80,7 @@ void FileDescriptor::truncate(off_t size) {
   assert(ftruncate(fd_, size) == 0);   // TODO
 }
 
+// TODO untested
 off_t FileDescriptor::size() {
   getStats();
   return stats_.st_size;

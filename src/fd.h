@@ -26,6 +26,7 @@ public:
   FileDescriptorMap &operator=(FileDescriptorMap &&other);
 
   char *get();
+  const char *get() const;
   size_t size() const;
 };
 
@@ -44,9 +45,9 @@ public:
   FileDescriptor(FileDescriptor &&other) noexcept;
   FileDescriptor &operator=(FileDescriptor &&other);
 
-  int fd();
-  FileDescriptorMap loadMap(off_t offset);
-  size_t getPageSize();
+  int fd() const;
+  FileDescriptorMap loadMap(off_t offset) const;
+  size_t getPageSize() const;
   void truncate(off_t size);
   off_t size();
 

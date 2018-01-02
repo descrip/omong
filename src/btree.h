@@ -27,7 +27,12 @@ public:
   BTreeInfo(FileDescriptorMap &&map)
     : map_{std::move(map)}, impl_{reinterpret_cast<Impl*>(map_.get())} {}
 
-  Impl *operator->() const { return impl_; }
+  // Impl *operator->() const { return impl_; }
+
+  OffsetType &root() { return impl_->root; }
+  const OffsetType &root() const { return impl_->root; }
+  OffsetType &nextFree() { return impl_->nextFree; }
+  const OffsetType &nextFree() const { return impl_->nextFree; }
 };
 
 template <typename Params>
@@ -57,13 +62,25 @@ public:
   BNode(BNode &&other) = default;
   BNode &operator=(BNode &&other) = default;
 
-  auto &isLeaf() { return impl_->isLeaf; }
+  bool &isLeaf() { return impl_->isLeaf; }
+  const bool &isLeaf() const { return impl_->isLeaf; }
+
   SizeType &size() { return impl_->size; }
+  const SizeType &size() const { return impl_->size; }
+
   KeyType *keys() {
     return reinterpret_cast<KeyType*>(map_.get() + sizeof(Impl));
   }
+  const KeyType *keys() const {
+    return reinterpret_cast<const KeyType*>(map_.get() + sizeof(Impl));
+  }
+
   OffsetType *children() {
     return reinterpret_cast<OffsetType*>(map_.get() + sizeof(Impl)
+        + sizeof(KeyType)*(getOrder()));
+  }
+  const OffsetType *children() const {
+    return reinterpret_cast<const OffsetType*>(map_.get() + sizeof(Impl)
         + sizeof(KeyType)*(getOrder()));
   }
 
@@ -72,9 +89,9 @@ public:
   }
   OffsetType getOffset() const { return offset_; }
 
-  SizeType lowerBound(KeyType key);
-  SizeType upperBound(KeyType key);
-  bool isFull() const { return impl_->size == getOrder(); }
+  SizeType lowerBound(KeyType key) const;
+  SizeType upperBound(KeyType key) const;
+  bool isFull() const { return size() == getOrder(); }
 
 #ifdef DEBUG
   void dump();
@@ -82,10 +99,19 @@ public:
 };
 
 template <typename Params>
-typename BNode<Params>::SizeType BNode<Params>::lowerBound(KeyType key) {
+typename BNode<Params>::SizeType BNode<Params>::lowerBound(KeyType key) const {
   // TODO: linear search for now
   for (SizeType i = 0; i < impl_->size; ++i)
     if (key <= keys()[i])
+      return i;
+  return impl_->size;
+}
+
+template <typename Params>
+typename BNode<Params>::SizeType BNode<Params>::upperBound(KeyType key) const {
+  // TODO: linear search for now
+  for (SizeType i = 0; i < impl_->size; ++i)
+    if (key < keys()[i])
       return i;
   return impl_->size;
 }
@@ -104,15 +130,6 @@ void BNode<Params>::dump() {
   std::cout << '\n';
 }
 #endif
-
-template <typename Params>
-typename BNode<Params>::SizeType BNode<Params>::upperBound(KeyType key) {
-  // TODO: linear search for now
-  for (SizeType i = 0; i < impl_->size; ++i)
-    if (key < keys()[i])
-      return i;
-  return impl_->size;
-}
 
 template <typename Params>
 class BTree {
@@ -137,7 +154,7 @@ public:
   void test();
   void dump();
   bool verify(std::shared_ptr<BNode<Params>> node);
-  bool verify() { return verify(getBNode(info_->root)); }
+  bool verify() { return verify(getBNode(info_.root())); }
 #endif
 
 private:
@@ -152,16 +169,16 @@ private:
 
 template <typename Params>
 std::shared_ptr<BNode<Params>> BTree<Params>::lowerBound(const KeyType &key, bool splitFullBNodes) {
-  auto root = getBNode(info_->root);
+  auto root = getBNode(info_.root());
   if (splitFullBNodes && root->isFull()) {
     auto newRoot = makeBNode();
     newRoot->children()[0] = root->getOffset();
-    info_->root = newRoot->getOffset();
+    info_.root() = newRoot->getOffset();
     splitChild(newRoot, 0);
     root = newRoot;
   }
 
-  auto curr = getBNode(info_->root);
+  auto curr = getBNode(info_.root());
   while (true) {
     if (curr->isLeaf())
       return curr;
@@ -210,9 +227,9 @@ template <typename Params>
 std::shared_ptr<BNode<Params>> BTree<Params>::makeBNode() {
   // TODO truncate file
   // TODO make a freelist
-  auto ret = std::make_shared<BNode<Params>>(info_->nextFree, fd_.loadMap(info_->nextFree));
-  cache_[info_->nextFree] = ret;
-  info_->nextFree += fd_.getPageSize();
+  auto ret = std::make_shared<BNode<Params>>(info_.nextFree(), fd_.loadMap(info_.nextFree()));
+  cache_[info_.nextFree()] = ret;
+  info_.nextFree() += fd_.getPageSize();
   ret->isLeaf() = false;
   ret->size() = 0;
   return ret;
@@ -230,7 +247,6 @@ void BTree<Params>::splitChild(std::shared_ptr<BNode<Params>> parent, SizeType c
   newChild->size() = order/2;
   child->size() = order/2;
 
-  // off-by-one errors everywhere
   for (SizeType i = 0; i < order/2; ++i)
     newChild->keys()[i] = child->keys()[order/2 + !newChild->isLeaf() + i];
   if (!child->isLeaf())
@@ -251,10 +267,10 @@ template <typename Params>
 void BTree<Params>::test() {     // TEST
   fd_.truncate(4096*100);
 
-  info_->root = fd_.getPageSize();
-  info_->nextFree = fd_.getPageSize()*2;
+  info_.root() = fd_.getPageSize();
+  info_.nextFree() = fd_.getPageSize()*2;
 
-  auto bn = loadBNode(info_->root);
+  auto bn = loadBNode(info_.root());
 
   bn->isLeaf() = true;
   bn->size() = 3;
@@ -282,8 +298,8 @@ void BTree<Params>::test() {     // TEST
 
 template <typename Params>
 void BTree<Params>::dump() {
-  std::cout << "root: " << info_->root << '\n';
-  std::cout << "nextFree: " << info_->nextFree << '\n';
+  std::cout << "root: " << info_.root() << '\n';
+  std::cout << "nextFree: " << info_.nextFree() << '\n';
   std::cout << '\n';
   for (auto &p : cache_)
     p.second->dump();
@@ -291,7 +307,7 @@ void BTree<Params>::dump() {
 
 template <typename Params>
 bool BTree<Params>::verify(std::shared_ptr<BNode<Params>> node) {
-  if (node->getOffset() == info_->root) {
+  if (node->getOffset() == info_.root()) {
     if (!(1 <= node->size() && node->size() <= node->getOrder())) {
       std::cout << node->getOffset() << '\n';
       return false;
