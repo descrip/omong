@@ -5,6 +5,7 @@
 
 #include <map>
 #include <memory>
+#include <algorithm>
 
 #ifdef DEBUG
   #include <iostream>
@@ -93,32 +94,18 @@ public:
   }
   OffsetType getOffset() const { return offset_; }
 
-  SizeType lowerBound(KeyType key) const;
-  SizeType upperBound(KeyType key) const;
+  SizeType lowerBound(KeyType key) const {
+    return std::lower_bound(keys(), keys()+size(), key) - keys();
+  }
+  SizeType upperBound(KeyType key) const {
+    return std::upper_bound(keys(), keys()+size(), key) - keys();
+  }
   bool isFull() const { return size() == getOrder(); }
 
 #ifdef DEBUG
   void dump();
 #endif
 };
-
-template <typename Params>
-typename BNode<Params>::SizeType BNode<Params>::lowerBound(KeyType key) const {
-  // TODO: linear search for now
-  for (SizeType i = 0; i < impl_->size; ++i)
-    if (key <= keys()[i])
-      return i;
-  return impl_->size;
-}
-
-template <typename Params>
-typename BNode<Params>::SizeType BNode<Params>::upperBound(KeyType key) const {
-  // TODO: linear search for now
-  for (SizeType i = 0; i < impl_->size; ++i)
-    if (key < keys()[i])
-      return i;
-  return impl_->size;
-}
 
 #ifdef DEBUG
 template <typename Params>
@@ -240,8 +227,7 @@ std::shared_ptr<BNode<Params>> BTree<Params>::makeBNode(bool isLeaf) {
   return ret;
 }
 
-/* assumes that this node is not full,
- * the child node at childInd is full */
+// assumes that this node is not full, the child node at childInd is full
 template <typename Params>
 void BTree<Params>::splitChild(std::shared_ptr<BNode<Params>> parent, SizeType childInd) {
   auto child = getBNode(parent->children()[childInd]);
