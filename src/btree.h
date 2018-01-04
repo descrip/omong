@@ -12,47 +12,7 @@
 #endif
 
 // TODO what if KeyType isn't default constructible?
-
-/*
-template <typename Params>
-class BTreeIterator {
-  using KeyType       = typename Params::KeyType;
-  using OffsetType    = typename Params::OffsetType;
-  using SizeType      = typename Params::SizeType;
-
-  const BTree<Params> &tree;
-  OffsetType offset_;
-  SizeType ind_;
-  KeyType key_;
-
-public:
-  BTreeIterator(const OffsetType &offset, const SizeType &ind)
-    : offset_{offset}, ind_{ind} {}
-
-  BTreeIterator &operator++();
-
-  void ensure();
-};
-
-template <typename Params>
-typename BTreeIterator<Params> &BTreeIterator<Params>::operator++() {
-  auto node = tree.getBNode(offset_);
-  ++ind_;
-  if (ind_ == node.size()) {
-    offset_ = node.follow();
-    size_ = 0;
-  }
-  node = tree.getBNode(offset_);
-  key_ = node.keys()[ind_];
-  return *this;
-}
-
-template <typename Params>
-void BTreeIterator<Params>::ensure() {
-  auto node = tree.getBNode(offset_);
-  if (node->
-}
-*/
+// KeyType should be default constructible + okay with copying
 
 template <typename Params>
 class BTree {
@@ -64,6 +24,7 @@ public:
 private:
   class BTreeInfo;
   class BNode;
+  class BTreeIterator;
   
   FileDescriptor fd_;
   BTreeInfo info_;
@@ -284,6 +245,52 @@ public:
   void dump();
 #endif
 };
+
+/*
+template <typename Params>
+class BTree<Params>::BTreeIterator {
+  const BTree<Params> &tree_;
+  OffsetType offset_;
+  SizeType ind_;
+  KeyType key_;
+
+private:
+  BTreeIterator(const BTree<Params> &tree, const OffsetType &offset, const SizeType &ind)
+    : tree_{tree}, offset_{offset}, ind_{ind} { peek(); }
+
+public:
+  BTreeIterator &operator++();
+
+private:
+  void peek();
+  void ensure();
+};
+
+template <typename Params>
+typename BTree<Params>::BTreeIterator &BTree<Params>::BTreeIterator::operator++() {
+  auto node = tree.getBNode(offset_);
+  ++ind_;
+  if (ind_ == node.size()) {
+    offset_ = node.follow();
+    ind_ = 0;
+  }
+  peek();
+  return *this;
+}
+
+template <typename Params>
+void BTree<Params>::BTreeIterator::peek() {
+  // TODO exception safe?
+  auto node = tree.getBNode(offset_);
+  key_ = node.keys()[ind_];
+}
+
+template <typename Params>
+void BTree<Params>::BTreeIterator::ensure() {
+  auto node = tree.getBNode(offset_);
+  if (node->keys()[ind_]
+}
+*/
 
 #ifdef DEBUG
 template <typename Params>
