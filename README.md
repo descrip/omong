@@ -2,6 +2,11 @@
 
 i don't know what i'm doing
 
+### todo
+
+ - finish iterator
+ - deletion
+
 ### notes
 
  - btree indexing won't construct properly if KeyType isn't default constructible

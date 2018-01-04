@@ -13,114 +13,46 @@
 
 // TODO what if KeyType isn't default constructible?
 
+/*
 template <typename Params>
-class BTreeInfo {
-  using OffsetType    = typename Params::OffsetType;
-  using SizeType      = typename Params::SizeType;
-
-  FileDescriptorMap map_;
-
-  struct Impl {
-    OffsetType root;
-    OffsetType nextFree;
-    SizeType internalOrder;
-    SizeType leafOrder;
-  } *impl_;
-
-public:
-  BTreeInfo(FileDescriptorMap &&map)
-    : map_{std::move(map)}, impl_{reinterpret_cast<Impl*>(map_.get())} {}
-
-  OffsetType &root() { return impl_->root; }
-  const OffsetType &root() const { return impl_->root; }
-  OffsetType &nextFree() { return impl_->nextFree; }
-  const OffsetType &nextFree() const { return impl_->nextFree; }
-
-  SizeType &internalOrder() { return impl_->internalOrder; }
-  const SizeType &internalOrder() const { return impl_->internalOrder; }
-  SizeType &leafOrder() { return impl_->leafOrder; }
-  const SizeType &leafOrder() const { return impl_->leafOrder; }
-};
-
-template <typename Params>
-class BNode {
+class BTreeIterator {
   using KeyType       = typename Params::KeyType;
   using OffsetType    = typename Params::OffsetType;
   using SizeType      = typename Params::SizeType;
 
+  const BTree<Params> &tree;
   OffsetType offset_;
-  const BTreeInfo<Params> &info_;
-  FileDescriptorMap map_;
-
-  struct Impl {
-    bool isLeaf;
-    SizeType size;
-  } *impl_;
+  SizeType ind_;
+  KeyType key_;
 
 public:
-  BNode(const OffsetType &offset, const BTreeInfo<Params> &info, FileDescriptorMap &&map)
-    : offset_{offset},
-      info_{info},
-      map_{std::move(map)},
-      impl_{reinterpret_cast<Impl*>(map_.get())} {}
+  BTreeIterator(const OffsetType &offset, const SizeType &ind)
+    : offset_{offset}, ind_{ind} {}
 
-  BNode(BNode &&other) = default;
-  BNode &operator=(BNode &&other) = default;
+  BTreeIterator &operator++();
 
-  bool &isLeaf() { return impl_->isLeaf; }
-  const bool &isLeaf() const { return impl_->isLeaf; }
-
-  SizeType &size() { return impl_->size; }
-  const SizeType &size() const { return impl_->size; }
-
-  KeyType *keys() {
-    return reinterpret_cast<KeyType*>(map_.get() + sizeof(Impl));
-  }
-  const KeyType *keys() const {
-    return reinterpret_cast<const KeyType*>(map_.get() + sizeof(Impl));
-  }
-
-  OffsetType *children() {
-    return reinterpret_cast<OffsetType*>(map_.get() + sizeof(Impl)
-        + sizeof(KeyType)*(getOrder()));
-  }
-  const OffsetType *children() const {
-    return reinterpret_cast<const OffsetType*>(map_.get() + sizeof(Impl)
-        + sizeof(KeyType)*(getOrder()));
-  }
-
-  SizeType getOrder() const {
-    return (isLeaf() ? info_.leafOrder() : info_.internalOrder());
-  }
-  OffsetType getOffset() const { return offset_; }
-
-  SizeType lowerBound(KeyType key) const {
-    return std::lower_bound(keys(), keys()+size(), key) - keys();
-  }
-  SizeType upperBound(KeyType key) const {
-    return std::upper_bound(keys(), keys()+size(), key) - keys();
-  }
-  bool isFull() const { return size() == getOrder(); }
-
-#ifdef DEBUG
-  void dump();
-#endif
+  void ensure();
 };
 
-#ifdef DEBUG
 template <typename Params>
-void BNode<Params>::dump() {
-  std::cout << "offset_: " << getOffset() << '\n';
-  std::cout << "isLeaf: " << isLeaf() << '\n';
-  std::cout << "size: " << size() << '\n';
-  for (SizeType i = 0; i < size(); ++i)
-    std::cout << keys()[i] << " \n"[i+1 == size()];
-  if (!isLeaf())
-    for (SizeType i = 0; i <= size(); ++i)
-      std::cout << children()[i] << " \n"[i == size()];
-  std::cout << '\n';
+typename BTreeIterator<Params> &BTreeIterator<Params>::operator++() {
+  auto node = tree.getBNode(offset_);
+  ++ind_;
+  if (ind_ == node.size()) {
+    offset_ = node.follow();
+    size_ = 0;
+  }
+  node = tree.getBNode(offset_);
+  key_ = node.keys()[ind_];
+  return *this;
 }
-#endif
+
+template <typename Params>
+void BTreeIterator<Params>::ensure() {
+  auto node = tree.getBNode(offset_);
+  if (node->
+}
+*/
 
 template <typename Params>
 class BTree {
@@ -130,36 +62,41 @@ public:
   using SizeType      = typename Params::SizeType;
 
 private:
+  class BTreeInfo;
+  class BNode;
+  
   FileDescriptor fd_;
-  BTreeInfo<Params> info_;
-  std::map<OffsetType, std::shared_ptr<BNode<Params>>> cache_;
+  BTreeInfo info_;
+  std::map<OffsetType, std::shared_ptr<typename BTree<Params>::BNode>> cache_;
 
 public:
   BTree(FileDescriptor &&fd)
     : fd_{std::move(fd)}, info_{fd_.loadMap(0)} {}
 
-  std::shared_ptr<BNode<Params>> lowerBound(const KeyType &key, bool splitFullBNodes = false);
+  std::shared_ptr<typename BTree<Params>::BNode> lowerBound(const KeyType &key, bool splitFullBNodes = false);
   void insert(const KeyType &key);
 
 #ifdef DEBUG
   void test();
   void dump();
-  bool verify(std::shared_ptr<BNode<Params>> node);
-  bool verify() { return verify(getBNode(info_.root())); }
+  bool verify(std::shared_ptr<typename BTree<Params>::BNode> node);
+  bool verify();
 #endif
 
 private:
-  std::shared_ptr<BNode<Params>> getBNode(OffsetType offset);
-  std::shared_ptr<BNode<Params>> makeBNode(bool isLeaf);
-  std::shared_ptr<BNode<Params>> loadBNode(OffsetType offset) {
-    return std::make_shared<BNode<Params>>(offset, info_, fd_.loadMap(offset));
+  std::shared_ptr<typename BTree<Params>::BNode> getBNode(OffsetType offset);
+  std::shared_ptr<typename BTree<Params>::BNode> makeBNode(bool isLeaf);
+  std::shared_ptr<typename BTree<Params>::BNode> loadBNode(OffsetType offset) {
+    return std::make_shared<BNode>(*this, offset, fd_.loadMap(offset));
   }
 
-  void splitChild(std::shared_ptr<BNode<Params>> parent, SizeType childInd);
+  const BTreeInfo &getInfo() const { return info_; };
+
+  void splitChild(std::shared_ptr<typename BTree<Params>::BNode> parent, SizeType childInd);
 };
 
 template <typename Params>
-std::shared_ptr<BNode<Params>> BTree<Params>::lowerBound(const KeyType &key, bool splitFullBNodes) {
+std::shared_ptr<typename BTree<Params>::BNode> BTree<Params>::lowerBound(const KeyType &key, bool splitFullBNodes) {
   auto root = getBNode(info_.root());
   if (splitFullBNodes && root->isFull()) {
     auto newRoot = makeBNode(false);
@@ -205,7 +142,7 @@ void BTree<Params>::insert(const KeyType &key) {
 }
 
 template <typename Params>
-std::shared_ptr<BNode<Params>> BTree<Params>::getBNode(OffsetType offset) {
+std::shared_ptr<typename BTree<Params>::BNode> BTree<Params>::getBNode(OffsetType offset) {
   // from https://channel9.msdn.com/Events/GoingNative/2013/My-Favorite-Cpp-10-Liner
   // TODO not exactly what we need, replace with reaper process
   auto sp = cache_[offset];
@@ -215,11 +152,11 @@ std::shared_ptr<BNode<Params>> BTree<Params>::getBNode(OffsetType offset) {
 }
 
 template <typename Params>
-std::shared_ptr<BNode<Params>> BTree<Params>::makeBNode(bool isLeaf) {
-  // TODO truncate file
+std::shared_ptr<typename BTree<Params>::BNode> BTree<Params>::makeBNode(bool isLeaf) {
+  if (fd_.size() <= info_.nextFree())
+    fd_.truncate(info_.nextFree()*2);
   // TODO make a freelist
-  auto ret = std::make_shared<BNode<Params>>(info_.nextFree(),
-      info_, fd_.loadMap(info_.nextFree()));
+  auto ret = std::make_shared<BNode>(*this, info_.nextFree(), fd_.loadMap(info_.nextFree()));
   cache_[info_.nextFree()] = ret;
   info_.nextFree() += fd_.getPageSize();
   ret->isLeaf() = isLeaf;
@@ -229,13 +166,15 @@ std::shared_ptr<BNode<Params>> BTree<Params>::makeBNode(bool isLeaf) {
 
 // assumes that this node is not full, the child node at childInd is full
 template <typename Params>
-void BTree<Params>::splitChild(std::shared_ptr<BNode<Params>> parent, SizeType childInd) {
+void BTree<Params>::splitChild(std::shared_ptr<typename BTree<Params>::BNode> parent, SizeType childInd) {
   auto child = getBNode(parent->children()[childInd]);
   SizeType order = child->getOrder();
 
   auto newChild = makeBNode(child->isLeaf());
   newChild->size() = order/2;
   child->size() = order/2;
+  newChild->follow() = child->follow();
+  child->follow() = newChild->getOffset();
 
   for (SizeType i = 0; i < order/2; ++i)
     newChild->keys()[i] = child->keys()[order/2 + !newChild->isLeaf() + i];
@@ -252,23 +191,123 @@ void BTree<Params>::splitChild(std::shared_ptr<BNode<Params>> parent, SizeType c
   ++parent->size();
 }
 
+template <typename Params>
+class BTree<Params>::BTreeInfo {
+  FileDescriptorMap map_;
+
+  struct Impl {
+    OffsetType root;
+    OffsetType nextFree;
+    SizeType internalOrder;
+    SizeType leafOrder;
+  } *impl_;
+
+public:
+  BTreeInfo(FileDescriptorMap &&map)
+    : map_{std::move(map)}, impl_{reinterpret_cast<Impl*>(map_.get())} {}
+
+  OffsetType &root() { return impl_->root; }
+  const OffsetType &root() const { return impl_->root; }
+  OffsetType &nextFree() { return impl_->nextFree; }
+  const OffsetType &nextFree() const { return impl_->nextFree; }
+
+  SizeType &internalOrder() { return impl_->internalOrder; }
+  const SizeType &internalOrder() const { return impl_->internalOrder; }
+  SizeType &leafOrder() { return impl_->leafOrder; }
+  const SizeType &leafOrder() const { return impl_->leafOrder; }
+};
+
+template <typename Params>
+class BTree<Params>::BNode {
+  const BTree<Params> &tree_;
+  OffsetType offset_;
+  FileDescriptorMap map_;
+
+  struct Impl {
+    bool isLeaf;
+    SizeType size;
+  } *impl_;
+
+public:
+  BNode(const BTree<Params> &tree, const OffsetType &offset, FileDescriptorMap &&map)
+    : tree_{tree}, offset_{offset}, map_{std::move(map)},
+      impl_{reinterpret_cast<Impl*>(map_.get())} {}
+
+  BNode(BNode &&other) = default;
+  BNode &operator=(BNode &&other) = default;
+
+  bool &isLeaf() { return impl_->isLeaf; }
+  const bool &isLeaf() const { return impl_->isLeaf; }
+
+  SizeType &size() { return impl_->size; }
+  const SizeType &size() const { return impl_->size; }
+
+  KeyType *keys() {
+    return reinterpret_cast<KeyType*>(map_.get() + sizeof(Impl));
+  }
+  const KeyType *keys() const {
+    return reinterpret_cast<const KeyType*>(map_.get() + sizeof(Impl));
+  }
+
+  OffsetType &follow() {
+    return *reinterpret_cast<OffsetType*>(map_.get() + sizeof(Impl)
+        + sizeof(KeyType)*(getOrder()));
+  }
+  const OffsetType &follow() const {
+    return *reinterpret_cast<const OffsetType*>(map_.get() + sizeof(Impl)
+        + sizeof(KeyType)*(getOrder()));
+  }
+
+  OffsetType *children() {
+    return reinterpret_cast<OffsetType*>(map_.get() + sizeof(Impl)
+        + sizeof(OffsetType) + sizeof(KeyType)*(getOrder()));
+  }
+  const OffsetType *children() const {
+    return reinterpret_cast<const OffsetType*>(map_.get() + sizeof(Impl)
+        + sizeof(OffsetType) + sizeof(KeyType)*(getOrder()));
+  }
+
+  SizeType getOrder() const {
+    return (isLeaf() ? tree_.getInfo().leafOrder() : tree_.getInfo().internalOrder());
+  }
+  OffsetType getOffset() const { return offset_; }
+
+  SizeType lowerBound(KeyType key) const {
+    return std::lower_bound(keys(), keys()+size(), key) - keys();
+  }
+  SizeType upperBound(KeyType key) const {
+    return std::upper_bound(keys(), keys()+size(), key) - keys();
+  }
+  bool isFull() const { return size() == getOrder(); }
+
+#ifdef DEBUG
+  void dump();
+#endif
+};
+
 #ifdef DEBUG
 template <typename Params>
 void BTree<Params>::test() {     // TEST
-  fd_.truncate(4096*100);
+  // INIT CODE
+  // TODO move this somewhere else
 
   info_.root() = fd_.getPageSize();
   info_.nextFree() = fd_.getPageSize()*2;
   info_.internalOrder() = 3;
   info_.leafOrder() = 8;
 
+  auto root = loadBNode(info_.root());
+  root->size() = 0;
+  root->isLeaf() = true;
+  root->follow() = 0;
+
+  // TESTING HERE
+
   auto bn = loadBNode(info_.root());
 
-  bn->isLeaf() = true;
-  bn->size() = 3;
-  bn->keys()[0] = -32;
-  bn->keys()[1] = 99;
-  bn->keys()[2] = 2039;
+  insert(-32);
+  insert(99);
+  insert(2039);
   insert(-239);
   insert(-999);
   insert(98);
@@ -298,7 +337,14 @@ void BTree<Params>::dump() {
 }
 
 template <typename Params>
-bool BTree<Params>::verify(std::shared_ptr<BNode<Params>> node) {
+bool BTree<Params>::verify() {
+  if (!verify(getBNode(info_.root())))
+    return false;
+  return true;
+}
+
+template <typename Params>
+bool BTree<Params>::verify(std::shared_ptr<typename BTree<Params>::BNode> node) {
   if (node->getOffset() == info_.root()) {
     if (!(1 <= node->size() && node->size() <= node->getOrder())) {
       std::cout << node->getOffset() << '\n';
@@ -319,6 +365,19 @@ bool BTree<Params>::verify(std::shared_ptr<BNode<Params>> node) {
         return false;
       }
   return true;
+}
+
+template <typename Params>
+void BTree<Params>::BNode::dump() {
+  std::cout << "offset_: " << getOffset() << '\n';
+  std::cout << "isLeaf: " << isLeaf() << '\n';
+  std::cout << "size: " << size() << '\n';
+  for (SizeType i = 0; i < size(); ++i)
+    std::cout << keys()[i] << " \n"[i+1 == size()];
+  if (!isLeaf())
+    for (SizeType i = 0; i <= size(); ++i)
+      std::cout << children()[i] << " \n"[i == size()];
+  std::cout << '\n';
 }
 #endif
 

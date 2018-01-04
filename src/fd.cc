@@ -80,7 +80,6 @@ void FileDescriptor::truncate(off_t size) {
   assert(ftruncate(fd_, size) == 0);   // TODO
 }
 
-// TODO untested
 off_t FileDescriptor::size() {
   getStats();
   return stats_.st_size;
