@@ -13,7 +13,6 @@ int main() {
   // fd must have size at least 8196
   BTree<Params> bt {std::move(fd)};
 #ifdef DEBUG
-  bt.test();
+  bt.randomTest();
 #endif
-  std::cout << fd.size() << '\n';
 }

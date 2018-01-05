@@ -9,6 +9,8 @@
 
 #ifdef DEBUG
   #include <iostream>
+  #include <cstdlib>
+  #include <ctime>
 #endif
 
 // TODO what if KeyType isn't default constructible?
@@ -34,13 +36,14 @@ public:
   BTree(FileDescriptor &&fd)
     : fd_{std::move(fd)}, info_{fd_.loadMap(0)} {}
 
-  std::shared_ptr<BNode> lowerBound(const KeyType &key,
-      bool splitFullBNodes = false);
+  std::shared_ptr<BNode> lowerBound(const KeyType &key);
   void insert(const KeyType &key);
   SizeType erase(const KeyType &key);
 
 #ifdef DEBUG
+  void init();
   void test();
+  void randomTest();
   void dump();
   bool verify(std::shared_ptr<BNode> node);
   bool verify();
@@ -53,18 +56,47 @@ private:
     return std::make_shared<BNode>(*this, offset, fd_.loadMap(offset));
   }
 
+  // method helpers
+  SizeType getNextChild(std::shared_ptr<BNode> curr, const KeyType &key) const;
   void splitChild(std::shared_ptr<BNode> parent, SizeType childInd);
-
-  // std::shared_ptr<BNode> eraseLowerBound(const KeyType &key, );
+  SizeType eraseFromLeaf(std::shared_ptr<BNode> leaf, const KeyType &key);
+  SizeType erase(std::shared_ptr<BNode> parent, std::shared_ptr<BNode> curr,
+      const KeyType &key);
 
   const BTreeInfo &getInfo() const { return info_; };
 };
 
 template <typename Params>
+typename BTree<Params>::SizeType
+BTree<Params>::getNextChild(std::shared_ptr<BNode> curr,
+    const KeyType &key) const {
+  SizeType ind = curr->lowerBound(key);
+  if (ind < curr->size() && curr->keys()[ind] == key)
+    ++ind;
+  return ind;
+}
+
+template <typename Params>
 std::shared_ptr<typename BTree<Params>::BNode>
-BTree<Params>::lowerBound(const KeyType &key, bool splitFullBNodes) {
+BTree<Params>::lowerBound(const KeyType &key) {
+  auto curr = getBNode(info_.root());
+  while (true)
+    if (curr->isLeaf())
+      return curr;
+    else {
+      SizeType ind = getNextChild(curr, key);
+      curr = getBNode(curr->children()[ind]);
+    }
+}
+
+template <typename Params>
+void
+BTree<Params>::insert(const KeyType &key) {
+  // TODO return an iterator
+
+  // if root is full, add a new bnode and make that the new root
   auto root = getBNode(info_.root());
-  if (splitFullBNodes && root->isFull()) {
+  if (root->isFull()) {
     auto newRoot = makeBNode(false);
     newRoot->children()[0] = root->getOffset();
     info_.root() = newRoot->getOffset();
@@ -72,31 +104,22 @@ BTree<Params>::lowerBound(const KeyType &key, bool splitFullBNodes) {
     root = newRoot;
   }
 
-  auto curr = getBNode(info_.root());
-  while (true) {
+  auto curr = root;
+  while (true)
     if (curr->isLeaf())
-      return curr;
+      break;
     else {
-      // TODO crappy code
-      SizeType ind = curr->lowerBound(key);
-      if (ind < curr->size() && curr->keys()[ind] == key)
-        ++ind;
+      SizeType ind = getNextChild(curr, key);
       auto child = getBNode(curr->children()[ind]);
-      if (splitFullBNodes && child->isFull())
+      // if child is full, split it and retry
+      if (child->isFull()) {
         splitChild(curr, ind);
-      ind = curr->lowerBound(key);
-      if (ind < curr->size() && curr->keys()[ind] == key)
-        ++ind;
-      curr = getBNode(curr->children()[ind]);
+        ind = getNextChild(curr, key);
+        curr = getBNode(curr->children()[ind]);
+      }
+      else curr = child;
     }
-  }
-}
 
-template <typename Params>
-void
-BTree<Params>::insert(const KeyType &key) {
-  // TODO return an iterator
-  auto curr = lowerBound(key, true);
   SizeType ind = curr->lowerBound(key);
   if (ind < curr->size() && curr->keys()[ind] == key) {
 #ifdef DEBUG
@@ -104,35 +127,105 @@ BTree<Params>::insert(const KeyType &key) {
 #endif
     return;
   }
-  for (SizeType i = curr->size(); i > ind; --i)
-    curr->keys()[i] = curr->keys()[i-1];
-  curr->keys()[ind] = key;
-  ++curr->size();
+
+  curr->insert(ind, key);
+}
+
+template <typename Params>
+typename BTree<Params>::SizeType
+BTree<Params>::eraseFromLeaf(std::shared_ptr<BNode> leaf, const KeyType &key) {
+  SizeType ind = leaf->lowerBound(key);
+  if (ind < leaf->size() && leaf->keys()[ind] == key) {
+    for (SizeType i = ind; i < leaf->size()-1; ++i)
+      leaf->keys()[i] = leaf->keys()[i+1];
+    --leaf->size();
+    return 1;
+  } else return 0;
+}
+
+template <typename Params>
+typename BTree<Params>::SizeType
+BTree<Params>::erase(std::shared_ptr<BNode> parent,
+    std::shared_ptr<BNode> curr, const KeyType &key) {
+
+  if (curr.isLeaf())
+    return eraseFromLeaf(curr, key);
+  SizeType ind = getNextChild(curr, key);
+  erase(curr, getBNode(curr->children()[ind]), key);
+  SizeType order = curr->getOrder();
+
+  if (curr.size() < order/2) {
+    // try borrowing from left sibling
+    if (0 < ind) {
+      auto sib = getBNode(curr->children()[ind-1]);
+      if (sib->size() > order/2) {
+        curr->insert(0, sib->keys()[sib->size()-1]);
+        sib->erase(sib->size()-1);
+        return 1;
+      }
+    }
+
+    // try borrowing from right sibling
+    if (ind+1 < curr->size()) {
+      auto sib = getBNode(curr->children()[ind+1]);
+      if (sib->size() > order/2) {
+        curr->insert(curr->size(), sib->keys()[0]);
+        sib->erase(0);
+        return 1;
+      }
+    }
+
+    // try merging with left sibling
+    if (0 < ind) {
+      auto sib = getBNode(curr->children()[ind-1]);
+      // sib->size() == order/2
+      for (SizeType i = curr.size(); i >= 1; --i)
+        curr->keys()[i] = curr->keys()[i-1];
+      curr->keys()[0] = sib->keys()[sib->size()-1];
+      --sib->size();
+      ++curr->size();
+      return 1;
+    }
+  }
 }
 
 /*
 template <typename Params>
-std::shared_ptr<typename BTree<Params>::BNode>
-BTree<Params>::eraseLowerBound(const KeyType &key, SizeType &ind) {
-  auto curr = getBNode(info_.root());
-  while (true) {
-    if (curr->isLeaf())
-  }
-  auto curr = getBNode(key);
-  SizeType ind = curr.lowerBound(key);
-  if (ind == curr.size())
-    return 0;
-}
-*/
-
-template <typename Params>
 typename BTree<Params>::SizeType
 BTree<Params>::erase(const KeyType &key) {
-  auto curr = getBNode(key);
-  SizeType ind = curr.lowerBound(key);
-  if (ind == curr.size())
-    return 0;
+  auto curr = getBNode(info_.root());
+  // edge case: btree is just one node
+
+  while (true) {
+    SizeType ind = curr->lowerBound(key);
+    if (ind < curr->size() && curr->keys()[ind] == key)
+      ++ind;
+    auto child = getBNode(curr->children()[ind]);
+    if (child.isLeaf()) {
+      SizeType ret = eraseFromLeaf(child, key);
+      if (ret == 0)
+        return 0;
+      SizeType order = curr->getOrder();
+
+      if (child->size() < order/2) {
+
+
+        // try merging with left sibling
+        if (0 < ind) {
+          auto sib = getBNode(curr->children()[ind-1]);
+          // sib->size() == order/2
+          for (SizeType i = curr.size(); i >= 1; --i)
+            curr->keys()[i] = curr->keys()[i-1];
+          curr->keys()[0] = sib->keys()[sib->size()-1];
+          --sib->size();
+          ++curr->size();
+          return 1;
+        }
+        
+      }
+  }
 }
+*/
 
 template <typename Params>
 std::shared_ptr<typename BTree<Params>::BNode>
@@ -169,25 +262,19 @@ BTree<Params>::splitChild(std::shared_ptr<typename BTree<Params>::BNode> parent,
   SizeType order = child->getOrder();
 
   auto newChild = makeBNode(child->isLeaf());
-  newChild->size() = order/2;
-  child->size() = order/2;
   newChild->follow() = child->follow();
   child->follow() = newChild->getOffset();
 
+  // split
   for (SizeType i = 0; i < order/2; ++i)
     newChild->keys()[i] = child->keys()[order/2 + !newChild->isLeaf() + i];
   if (!child->isLeaf())
     for (SizeType i = 0; i <= order/2; ++i)
       newChild->children()[i] = child->children()[order/2 +
           !newChild->isLeaf() + i];
+  child->size() = newChild->size() = order/2;
 
-  for (SizeType i = parent->size(); i > childInd; --i)
-    parent->keys()[i] = parent->keys()[i-1];
-  parent->keys()[childInd] = child->keys()[order/2];
-  for (SizeType i = parent->size()+1; i > childInd+1; --i)
-    parent->children()[i] = parent->children()[i-1];
-  parent->children()[childInd+1] = newChild->getOffset();
-  ++parent->size();
+  parent->insert(childInd, child->keys()[order/2], newChild->getOffset());
 }
 
 template <typename Params>
@@ -238,7 +325,6 @@ public:
 
   bool &isLeaf() { return impl_->isLeaf; }
   const bool &isLeaf() const { return impl_->isLeaf; }
-
   SizeType &size() { return impl_->size; }
   const SizeType &size() const { return impl_->size; }
 
@@ -248,7 +334,6 @@ public:
   const KeyType *keys() const {
     return reinterpret_cast<const KeyType*>(map_.get() + sizeof(Impl));
   }
-
   OffsetType &follow() {
     return *reinterpret_cast<OffsetType*>(map_.get() + sizeof(Impl)
         + sizeof(KeyType)*(getOrder()));
@@ -257,7 +342,6 @@ public:
     return *reinterpret_cast<const OffsetType*>(map_.get() + sizeof(Impl)
         + sizeof(KeyType)*(getOrder()));
   }
-
   OffsetType *children() {
     return reinterpret_cast<OffsetType*>(map_.get() + sizeof(Impl)
         + sizeof(OffsetType) + sizeof(KeyType)*(getOrder()));
@@ -272,6 +356,7 @@ public:
         : tree_.getInfo().internalOrder());
   }
   OffsetType getOffset() const { return offset_; }
+  bool isFull() const { return size() == getOrder(); }
 
   SizeType lowerBound(KeyType key) const {
     return std::lower_bound(keys(), keys()+size(), key) - keys();
@@ -279,12 +364,45 @@ public:
   SizeType upperBound(KeyType key) const {
     return std::upper_bound(keys(), keys()+size(), key) - keys();
   }
-  bool isFull() const { return size() == getOrder(); }
+
+  // for leaf nodes
+  void insert(SizeType ind, const KeyType &key);
+  // for internal nodes
+  void insert(SizeType ind, const KeyType &key, const OffsetType &child);
+  void erase(SizeType ind);
+  void merge(std::shared_ptr<BNode> other);
 
 #ifdef DEBUG
   void dump();
 #endif
 };
+
+template <typename Params>
+void
+BTree<Params>::BNode::insert(SizeType ind, const KeyType &key) {
+  std::move_backward(keys()+ind, keys()+size(), keys()+size()+1);
+  keys()[ind] = key;
+  ++size();
+}
+
+template <typename Params>
+void
+BTree<Params>::BNode::insert(SizeType ind, const KeyType &key,
+    const OffsetType &child) {
+  insert(ind, key);
+  std::move_backward(children()+ind+1, children()+size()+1,
+      children()+size()+2);
+  children()[ind+1] = child;
+}
+
+template <typename Params>
+void
+BTree<Params>::BNode::erase(SizeType ind) {
+  std::move(keys()+ind+1, keys()+size(), keys()+ind);
+  if (!isLeaf())
+    std::move(children()+ind+2, children()+size(), children()+ind+1);
+  --size();
+}
 
 /*
 template <typename Params>
@@ -339,10 +457,7 @@ BTree<Params>::BTreeIterator::ensure() {
 #ifdef DEBUG
 template <typename Params>
 void
-BTree<Params>::test() {     // TEST
-  // INIT CODE
-  // TODO move this somewhere else
-
+BTree<Params>::init() {
   info_.root() = fd_.getPageSize();
   info_.nextFree() = fd_.getPageSize()*2;
   info_.internalOrder() = 3;
@@ -352,10 +467,23 @@ BTree<Params>::test() {     // TEST
   root->size() = 0;
   root->isLeaf() = true;
   root->follow() = 0;
+}
 
-  // TESTING HERE
+template <typename Params>
+void
+BTree<Params>::randomTest() {
+  init();
+  srand(time(nullptr));
+  for (int i = 0; i < 56; ++i)
+    insert(rand());
+  dump();
+  assert(verify());
+}
 
-  auto bn = loadBNode(info_.root());
+template <typename Params>
+void
+BTree<Params>::test() {
+  init();
 
   insert(-32);
   insert(99);
@@ -406,8 +534,8 @@ BTree<Params>::verify(std::shared_ptr<typename BTree<Params>::BNode> node) {
       return false;
     }
   } else {
-    SizeType ord = node->getOrder();
-    if (!(ord/2 <= node->size() && node->size() <= ord)) {
+    SizeType order = node->getOrder();
+    if (!(order/2 <= node->size() && node->size() <= order)) {
       std::cout << node->getOffset() << '\n';
       return false;
     }
